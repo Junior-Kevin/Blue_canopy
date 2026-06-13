@@ -1,5 +1,5 @@
 -- ===================================================================
--- SILVER LAYER: CRM DATA TRANSFORMATION (With Deduplication)
+-- SILVER LAYER: CRM DATA TRANSFORMATION (Preserve ID Format)
 -- ===================================================================
 
 DECLARE @start DATE = '1978-01-01';
@@ -10,7 +10,7 @@ DECLARE @date_span INT = DATEDIFF(DAY, @start, @end) + 1;
 DROP TABLE IF EXISTS Blue_canopy.silver.crm;
 
 CREATE TABLE Blue_canopy.silver.crm (
-    customer_id INT PRIMARY KEY,
+    customer_id NVARCHAR(50) PRIMARY KEY,  -- Keep original format (VARCHAR/NVARCHAR)
     first_name NVARCHAR(100),
     last_name NVARCHAR(100),
     full_name NVARCHAR(201),
@@ -46,19 +46,46 @@ CREATE TABLE Blue_canopy.silver.crm (
     updated_date DATETIME2 DEFAULT GETDATE()
 );
 
--- Insert transformed data with deduplication
+-- Insert transformed data - ONLY remove duplicates, keep ID format
 WITH 
-source_cleaned AS (
+-- First, remove duplicates by keeping the first occurrence of each customer_id
+deduplicated AS (
     SELECT 
-        customer_id_clean = TRY_CAST(
-            CASE 
-                WHEN customer_id LIKE 'CUST-%' THEN REPLACE(customer_id, 'CUST-', '')
-                WHEN customer_id LIKE '%DUP%' THEN NULL
-                ELSE customer_id
-            END AS INT
-        ),
+        customer_id,  -- Keep original format
+        first_name,
+        last_name,
+        gender,
+        birth_date,
+        phone,
+        email,
+        county,
+        town,
+        customer_segment,
+        acquisition_channel,
+        registration_date,
+        churn_date,
+        loyalty_tier,
+        communication_preferences,
+        feedback_score,
+        -- Create row number to identify and remove duplicates
+        ROW_NUMBER() OVER(
+            PARTITION BY customer_id  -- Group by original customer_id
+            ORDER BY 
+                CASE WHEN churn_date IS NULL THEN 1 ELSE 2 END,  -- Prefer active customers first
+                registration_date DESC  -- Then most recent registration
+        ) AS row_num
+    FROM Blue_canopy.bronze.crm_raw
+    WHERE customer_id NOT LIKE '%DUP%'  -- Remove rows with DUP marker
+      AND customer_id IS NOT NULL
+),
+-- Clean the data after deduplication
+cleaned AS (
+    SELECT 
+        customer_id,
+        -- Clean names (preserve format, just capitalize first letter)
         first_name = TRIM(UPPER(LEFT(LOWER(first_name), 1)) + LOWER(SUBSTRING(first_name, 2, LEN(first_name)))),
         last_name = TRIM(UPPER(LEFT(LOWER(last_name), 1)) + LOWER(SUBSTRING(last_name, 2, LEN(last_name)))),
+        -- Standardize gender
         gender = CASE 
             WHEN gender IN ('M', 'Male', 'MALE', 'male') THEN 'Male'
             WHEN gender IN ('F', 'Female', 'FEMALE', 'female') THEN 'Female'
@@ -67,10 +94,14 @@ source_cleaned AS (
         raw_birth_date = birth_date,
         raw_registration_date = registration_date,
         raw_churn_date = churn_date,
+        -- Clean phone
         phone = TRIM(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', '')),
+        -- Clean email
         email = TRIM(LOWER(email)),
+        -- Clean geography
         county = TRIM(UPPER(LEFT(county, 1)) + LOWER(SUBSTRING(county, 2, LEN(county)))),
         town = TRIM(UPPER(LEFT(town, 1)) + LOWER(SUBSTRING(town, 2, LEN(town)))),
+        -- Standardize segments
         customer_segment = CASE 
             WHEN customer_segment IN ('Platinum', 'Gold', 'Silver', 'Bronze') THEN customer_segment
             ELSE 'Standard'
@@ -85,57 +116,37 @@ source_cleaned AS (
         END,
         communication_preferences = COALESCE(communication_preferences, 'Email'),
         feedback_score = TRY_CAST(feedback_score AS DECIMAL(5,2)),
-        random_days = ABS(CHECKSUM(NEWID())) % @date_span,
-        -- Create a row number to identify duplicates
-        row_num = ROW_NUMBER() OVER(
-            PARTITION BY 
-                TRY_CAST(
-                    CASE 
-                        WHEN customer_id LIKE 'CUST-%' THEN REPLACE(customer_id, 'CUST-', '')
-                        ELSE customer_id
-                    END AS INT
-                ) 
-            ORDER BY 
-                CASE WHEN churn_date IS NULL THEN 1 ELSE 2 END,  -- Prefer active customers
-                registration_date DESC  -- Prefer most recent registration
-        )
-    FROM Blue_canopy.bronze.crm_raw
-    WHERE customer_id NOT LIKE '%DUP%'
-      AND TRY_CAST(
-            CASE 
-                WHEN customer_id LIKE 'CUST-%' THEN REPLACE(customer_id, 'CUST-', '')
-                ELSE customer_id
-            END AS INT) IS NOT NULL
+        random_days = ABS(CHECKSUM(NEWID())) % @date_span
+    FROM deduplicated
+    WHERE row_num = 1  -- Keep only first occurrence of each customer_id
 ),
--- Keep only the first row per customer_id
-deduplicated AS (
-    SELECT *
-    FROM source_cleaned
-    WHERE row_num = 1
-),
+-- Convert dates
 date_converted AS (
     SELECT 
         *,
         clean_birth_date = CASE 
-            WHEN ISDATE(raw_birth_date) = 1 AND raw_birth_date NOT LIKE '%[^0-9-]%'
+            WHEN ISDATE(raw_birth_date) = 1 
+                 AND raw_birth_date NOT LIKE '%[^0-9-]%'
                  AND raw_birth_date NOT IN ('2023-13-45', '1900-01-01')
             THEN CAST(raw_birth_date AS DATE)
             ELSE DATEADD(DAY, random_days, @start)
         END,
         clean_registration_date = CASE 
-            WHEN ISDATE(raw_registration_date) = 1 AND raw_registration_date NOT LIKE '%[^0-9-]%'
+            WHEN ISDATE(raw_registration_date) = 1 
+                 AND raw_registration_date NOT LIKE '%[^0-9-]%'
                  AND raw_registration_date NOT IN ('2023-13-45', '1900-01-01')
             THEN CAST(raw_registration_date AS DATE)
             ELSE DATEADD(DAY, random_days, @start)
         END,
         clean_churn_date = CASE 
             WHEN raw_churn_date IS NULL THEN NULL
-            WHEN ISDATE(raw_churn_date) = 1 AND raw_churn_date NOT LIKE '%[^0-9-]%'
+            WHEN ISDATE(raw_churn_date) = 1 
+                 AND raw_churn_date NOT LIKE '%[^0-9-]%'
                  AND raw_churn_date NOT IN ('2023-13-45', '1900-01-01')
             THEN CAST(raw_churn_date AS DATE)
             ELSE DATEADD(DAY, random_days, @start)
         END
-    FROM deduplicated
+    FROM cleaned
 )
 INSERT INTO Blue_canopy.silver.crm (
     customer_id, first_name, last_name, full_name, gender, birth_date, age, age_band,
@@ -146,13 +157,13 @@ INSERT INTO Blue_canopy.silver.crm (
     phone_prefix, is_phone_valid, is_email_valid
 )
 SELECT 
-    customer_id_clean,
+    customer_id,  -- Original format preserved!
     first_name,
     last_name,
-    CONCAT(first_name, ' ', last_name),
+    CONCAT(first_name, ' ', last_name) AS full_name,
     gender,
-    clean_birth_date,
-    DATEDIFF(YEAR, clean_birth_date, GETDATE()),
+    clean_birth_date AS birth_date,
+    DATEDIFF(YEAR, clean_birth_date, GETDATE()) AS age,
     CASE 
         WHEN clean_birth_date IS NULL THEN 'Unknown'
         WHEN DATEDIFF(YEAR, clean_birth_date, GETDATE()) < 18 THEN 'Under 18'
@@ -161,53 +172,68 @@ SELECT
         WHEN DATEDIFF(YEAR, clean_birth_date, GETDATE()) BETWEEN 35 AND 49 THEN '35-49'
         WHEN DATEDIFF(YEAR, clean_birth_date, GETDATE()) BETWEEN 50 AND 64 THEN '50-64'
         ELSE '65+'
-    END,
+    END AS age_band,
+    -- Format phone number (keeps original digits, just standardizes format)
     CASE 
         WHEN LEN(phone) = 9 AND phone LIKE '7%' THEN CONCAT('07', phone)
         WHEN LEN(phone) = 9 AND phone LIKE '1%' THEN CONCAT('01', phone)
         WHEN LEN(phone) = 10 AND phone LIKE '07%' THEN phone
         WHEN LEN(phone) = 12 AND phone LIKE '2547%' THEN CONCAT('0', RIGHT(phone, 9))
         ELSE phone
-    END,
+    END AS phone,
     email,
     county,
     town,
     customer_segment,
     acquisition_channel,
-    clean_registration_date,
-    clean_churn_date,
+    clean_registration_date AS registration_date,
+    clean_churn_date AS churn_date,
     loyalty_tier,
     communication_preferences,
     feedback_score,
-    NULL,  -- home_county
-    NULL,  -- primary_store_id
-    CASE WHEN clean_churn_date IS NOT NULL AND clean_churn_date <= GETDATE() THEN 1 ELSE 0 END,
-    DATEDIFF(DAY, clean_registration_date, ISNULL(clean_churn_date, GETDATE())),
-    DATEDIFF(MONTH, clean_registration_date, ISNULL(clean_churn_date, GETDATE())),
+    NULL AS home_county,  -- To be updated later
+    NULL AS primary_store_id,  -- To be updated later
+    CASE 
+        WHEN clean_churn_date IS NOT NULL AND clean_churn_date <= GETDATE() THEN 1 
+        ELSE 0 
+    END AS is_churned,
+    DATEDIFF(DAY, clean_registration_date, ISNULL(clean_churn_date, GETDATE())) AS tenure_days,
+    DATEDIFF(MONTH, clean_registration_date, ISNULL(clean_churn_date, GETDATE())) AS tenure_months,
     CASE 
         WHEN DATEDIFF(DAY, clean_registration_date, ISNULL(clean_churn_date, GETDATE())) < 30 THEN 'New (<30 days)'
         WHEN DATEDIFF(DAY, clean_registration_date, ISNULL(clean_churn_date, GETDATE())) < 90 THEN 'Recent (30-90 days)'
         WHEN DATEDIFF(DAY, clean_registration_date, ISNULL(clean_churn_date, GETDATE())) < 180 THEN 'Regular (3-6 months)'
         WHEN DATEDIFF(DAY, clean_registration_date, ISNULL(clean_churn_date, GETDATE())) < 365 THEN 'Established (6-12 months)'
         ELSE 'Loyal (>1 year)'
-    END,
-    YEAR(clean_registration_date),
-    MONTH(clean_registration_date),
-    DATEPART(QUARTER, clean_registration_date),
-    RIGHT(email, LEN(email) - CHARINDEX('@', email)),
-    LEFT(phone, 3),
-    CASE WHEN LEN(phone) BETWEEN 10 AND 12 AND phone NOT LIKE '%[^0-9]%' THEN 1 ELSE 0 END,
-    CASE WHEN email LIKE '%_@__%.__%' THEN 1 ELSE 0 END
+    END AS tenure_band,
+    YEAR(clean_registration_date) AS registration_year,
+    MONTH(clean_registration_date) AS registration_month,
+    DATEPART(QUARTER, clean_registration_date) AS registration_quarter,
+    -- Extract email domain
+    CASE 
+        WHEN email IS NOT NULL AND CHARINDEX('@', email) > 0 
+        THEN RIGHT(email, LEN(email) - CHARINDEX('@', email))
+        ELSE NULL 
+    END AS email_domain,
+    LEFT(phone, 3) AS phone_prefix,
+    CASE WHEN LEN(phone) BETWEEN 10 AND 12 AND phone NOT LIKE '%[^0-9]%' THEN 1 ELSE 0 END AS is_phone_valid,
+    CASE WHEN email LIKE '%_@__%.__%' THEN 1 ELSE 0 END AS is_email_valid
 FROM date_converted
-WHERE customer_id_clean IS NOT NULL;
+WHERE customer_id IS NOT NULL;
 
--- Verify no duplicates were inserted
+-- Verify results
 SELECT 
     COUNT(*) AS total_records,
     COUNT(DISTINCT customer_id) AS unique_customers,
     CASE 
         WHEN COUNT(*) = COUNT(DISTINCT customer_id) 
-        THEN 'No duplicates - Good!' 
-        ELSE 'Has duplicates - Problem!' 
-    END AS duplicate_check
+        THEN '✓ No duplicates' 
+        ELSE '✗ Still has duplicates' 
+    END AS duplicate_check,
+    MIN(customer_id) AS sample_customer_id
 FROM Blue_canopy.silver.crm;
+
+-- Show sample of customer_id formats (preserved)
+SELECT TOP 10 customer_id, first_name, last_name
+FROM Blue_canopy.silver.crm
+ORDER BY customer_id;
