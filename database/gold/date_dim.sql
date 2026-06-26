@@ -15,20 +15,43 @@ WITH dates AS (
         SELECT date FROM silver.pos_transactions UNION
         SELECT return_date FROM silver.returns UNION
         SELECT interaction_date FROM silver.service_interactions
-    )
+    ) AS all_dates
 )
 SELECT 
+    -- ===== IDENTIFIER =====
     date_id = CONVERT(INT, FORMAT(date, 'yyyyMMdd')),
     date,
-    year = YEAR(date),
-    month = MONTH(date),
-    month_name = DATENAME(month, date),
-    quarter = DATEPART(quarter, date),
+    
+    -- ===== DAY LEVEL =====
+    day_of_week = DATEPART(weekday, date),        -- 1-7
+    day_name = DATENAME(weekday, date),           -- Full name
+    day_name_short = FORMAT(date, 'ddd'),         -- 3-letter abbrev
+    day_of_month = DAY(date),                     -- 1-31
+    day_of_the_year = DATEPART(dayofyear, date),  -- 1-366
+    
+    -- ===== WEEK LEVEL =====
+    week_of_year = DATEPART(week, date),          -- 1-53
+    
+    -- ===== MONTH LEVEL =====
+    month = MONTH(date),                          -- 1-12
+    month_name = DATENAME(MONTH, date),           -- Full name
+    month_name_short = FORMAT(date, 'MMM'),       -- 3-letter abbrev
+    year_month = DATETRUNC(MONTH, date),          -- First day of month
+    
+    -- ===== QUARTER LEVEL =====
+    quarter = DATEPART(quarter, date),            -- 1-4
     quarter_name = 'Q' + CAST(DATEPART(quarter, date) AS VARCHAR) + ' ' + CAST(YEAR(date) AS VARCHAR),
-    week_number = DATEPART(week, date),
-    day_of_month = DAY(date),
-    day_of_week = DATEPART(weekday, date),
-    day_name = DATENAME(weekday, date),
-    is_weekend = CASE WHEN DATEPART(weekday, date) IN (1, 7) THEN 1 ELSE 0 END
+    
+    -- ===== YEAR LEVEL =====
+    year = YEAR(date),
+    
+    -- ===== FISCAL =====
+    fiscal_year = CONCAT(YEAR(DATEADD(month, -6, date)), '/', YEAR(DATEADD(month, 6, date))),
+    fiscal_quarter = DATEPART(quarter, DATEADD(month, -6, date)),
+    
+    -- ===== FLAGS =====
+    is_weekend = CASE WHEN DATEPART(weekday, date) IN (1, 7) THEN 'yes' ELSE 'no' END
+INTO gold.dim_date
 FROM dates
 ORDER BY date;
+
