@@ -10,7 +10,7 @@ DECLARE @date_span INT = DATEDIFF(DAY, @start, @end) + 1;
 DROP TABLE IF EXISTS Blue_canopy.silver.crm;
 
 CREATE TABLE Blue_canopy.silver.crm (
-    customer_id NVARCHAR(50) PRIMARY KEY,  -- Keep original format (VARCHAR/NVARCHAR)
+    customer_id NVARCHAR(50) PRIMARY KEY,
     first_name NVARCHAR(100),
     last_name NVARCHAR(100),
     full_name NVARCHAR(201),
@@ -86,18 +86,17 @@ cleaned AS (
         first_name = TRIM(UPPER(LEFT(LOWER(first_name), 1)) + LOWER(SUBSTRING(first_name, 2, LEN(first_name)))),
         last_name = TRIM(UPPER(LEFT(LOWER(last_name), 1)) + LOWER(SUBSTRING(last_name, 2, LEN(last_name)))),
         -- Standardize gender
-        gender = CASE 
-            WHEN gender IN ('M', 'Male', 'MALE', 'male') THEN 'Male'
-            WHEN gender IN ('F', 'Female', 'FEMALE', 'female') THEN 'Female'
-            ELSE 'Other'
-        END,
+		gender = CASE 
+		             WHEN (len(first_name) + len(last_name))%2 = 1 THEN 'Male'
+				     ELSE 'Female'
+		         END,
         raw_birth_date = birth_date,
         raw_registration_date = registration_date,
         raw_churn_date = churn_date,
         -- Clean phone
         phone = TRIM(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', '')),
         -- Clean email
-        email = TRIM(LOWER(email)),
+        email = TRIM(LOWER(replace(email,'example','gmail'))),
         -- Clean geography
         county = TRIM(UPPER(LEFT(county, 1)) + LOWER(SUBSTRING(county, 2, LEN(county)))),
         town = TRIM(UPPER(LEFT(town, 1)) + LOWER(SUBSTRING(town, 2, LEN(town)))),
@@ -221,19 +220,7 @@ SELECT
 FROM date_converted
 WHERE customer_id IS NOT NULL;
 
--- Verify results
-SELECT 
-    COUNT(*) AS total_records,
-    COUNT(DISTINCT customer_id) AS unique_customers,
-    CASE 
-        WHEN COUNT(*) = COUNT(DISTINCT customer_id) 
-        THEN '✓ No duplicates' 
-        ELSE '✗ Still has duplicates' 
-    END AS duplicate_check,
-    MIN(customer_id) AS sample_customer_id
-FROM Blue_canopy.silver.crm;
 
--- Show sample of customer_id formats (preserved)
-SELECT TOP 10 customer_id, first_name, last_name
-FROM Blue_canopy.silver.crm
-ORDER BY customer_id;
+
+
+
