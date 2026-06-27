@@ -1,5 +1,7 @@
-
+USE Blue_canopy;
+GO
 DROP TABLE IF EXISTS gold.dim_product;
+GO
 SELECT  
        product_sk  = CONVERT(INT,ROW_NUMBER() OVER (ORDER BY product_id, valid_from))
 	  ,product_id
@@ -22,6 +24,6 @@ SELECT
       ,[valid_to]
       ,[discontinued_date]
 	  ,is_current_version = CASE WHEN valid_to IS NULL THEN 'yes' ELSE 'no' END
-	  INTO gold_dim_product
+	  INTO gold.dim_product
   FROM [Blue_canopy].[silver].[products]
   ORDER BY product_id
