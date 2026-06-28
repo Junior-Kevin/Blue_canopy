@@ -18,3 +18,4 @@ SELECT
       ,[tax_id]
 	  INTO gold.dim_supplier
   FROM [Blue_canopy].[silver].[suppliers]
+  WHERE supplier_id NOT LIKE '%DUP' 
