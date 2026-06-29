@@ -23,3 +23,52 @@ LEFT JOIN [Blue_canopy].[silver].[promotions]  P
 ON t.date between p.start_date AND p.end_date
 LEFT JOIN [Blue_canopy].[silver].[campaigns] ca
 ON t.date between ca.start_date and ca.end_date
+
+
+
+
+WITH pos_t as (
+			SELECT TOP (10000) [transaction_id]
+				  ,[date]
+				  ,[time]
+				  ,[store_id]
+				  ,[customer_id]
+				  ,[cashier_id]
+				  ,[payment_method]
+				  ,[total_amount]
+			  FROM [Blue_canopy].[silver].[pos_transactions]),
+lines_merged AS(
+		SELECT TOP (10000) 
+			   [transaction_id]
+			  ,SUM([quantity]) quantity
+			  ,SUM([unit_price_kes]) unit_price_kes
+			  ,AVG([discount_rate])  discount_rate
+			  ,SUM([effective_unit_price_kes]) effective_unit_price_kes
+			  ,SUM([discount_amount_kes])  discount_amount_kes
+			  ,SUM([line_total_kes])  line_total_kes
+		  FROM [Blue_canopy].[silver].[pos_line_items]
+		  GROUP BY transaction_id)
+		SELECT 
+		          p.[transaction_id]
+				  ,[date]
+				  ,[time]
+				  ,[store_id]
+				  ,[customer_id]
+				  ,[cashier_id]
+				  ,promotion_id = pr.promotion_id
+	              ,campaign_sk = ca.campaign_id
+				  ,[payment_method]
+				  ,[total_amount]
+				  ,quantity
+				  ,unit_price_kes
+				  ,l.discount_rate
+				  ,effective_unit_price_kes
+				  ,discount_amount_kes
+				  ,line_total_kes
+FROM pos_t P  JOIN lines_merged l
+ON P.transaction_id = l.transaction_id
+LEFT JOIN [Blue_canopy].[silver].[promotions]  Pr
+ON p.date between pr.start_date AND pr.end_date
+LEFT JOIN [Blue_canopy].[silver].[campaigns] ca
+ON p.date between ca.start_date and ca.end_date
+
