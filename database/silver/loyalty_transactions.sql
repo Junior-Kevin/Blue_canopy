@@ -1,0 +1,146 @@
+WITH base AS (
+    SELECT 
+        [transaction_id],
+        [customer_id],
+        CAST([date] AS DATE) AS transaction_date,
+        CAST([points_earned] AS INT) AS points_earned,
+        CAST([points_redeemed] AS INT) AS points_redeemed,
+        CAST([points_balance] AS INT) AS points_balance,
+        LOWER(TRIM([transaction_type])) AS transaction_type,
+        [order_id]
+    FROM [Blue_canopy].[bronze].[loyalty_transactions_raw]
+    WHERE [transaction_id] IS NOT NULL 
+      AND [customer_id] IS NOT NULL
+),
+
+cleaned AS (
+    SELECT 
+        -- Core identifiers
+        transaction_id,
+        customer_id,
+        
+        -- Clean customer_id (remove -DUP if exists)
+        CASE 
+            WHEN customer_id LIKE '%-DUP%' THEN LEFT(customer_id, CHARINDEX('-DUP', customer_id) - 1)
+            ELSE customer_id
+        END AS customer_id_clean,
+        
+        -- Date handling
+        transaction_date,
+        YEAR(transaction_date) AS transaction_year,
+        MONTH(transaction_date) AS transaction_month,
+        DATEPART(QUARTER, transaction_date) AS transaction_quarter,
+        FORMAT(transaction_date, 'yyyy-MM') AS transaction_year_month,
+        
+        -- Points (absolute values for calculations)
+        points_earned,
+        ABS(points_redeemed) AS points_redeemed_absolute,  -- Store as positive
+        points_balance,
+        
+        -- For redemption: store as negative for running balance calculation
+        CASE 
+            WHEN transaction_type = 'redeem' THEN -ABS(points_redeemed)
+            ELSE points_earned
+        END AS points_net_change,
+        
+        -- Transaction type standardization
+        CASE 
+            WHEN transaction_type IN ('earn', 'earning', 'earned', 'credit') THEN 'Earn'
+            WHEN transaction_type IN ('redeem', 'redemption', 'redeemed', 'debit') THEN 'Redeem'
+            WHEN points_earned < 0 THEN 'Adjustment (Negative)'
+            WHEN points_redeemed > 0 AND transaction_type = 'earn' THEN 'Mixed - Review'
+            ELSE 'Other'
+        END AS transaction_type_clean,
+        
+        -- Order linkage
+        order_id,
+        CASE 
+            WHEN order_id IS NULL OR order_id = '' THEN 'No linked order'
+            WHEN order_id LIKE 'ORD-%' THEN 'E-commerce order'
+            WHEN order_id LIKE 'TXN-%' THEN 'POS transaction'
+            ELSE 'Unknown source'
+        END AS order_source_type,
+        
+        -- Points value tier (assuming 1 KES = 1 point? Adjust as needed)
+        CASE 
+            WHEN points_earned >= 1000 THEN 'High earner (1000+ points)'
+            WHEN points_earned >= 500 THEN 'Medium earner (500-999 points)'
+            WHEN points_earned >= 100 THEN 'Low earner (100-499 points)'
+            WHEN points_earned > 0 THEN 'Small earner (1-99 points)'
+            WHEN points_redeemed_absolute >= 1000 THEN 'High redemption (1000+ points)'
+            ELSE 'No significant activity'
+        END AS points_activity_tier,
+        
+        -- Customer point status
+        CASE 
+            WHEN points_balance >= 5000 THEN 'VIP - High points'
+            WHEN points_balance >= 1000 THEN 'Active - Good points'
+            WHEN points_balance >= 100 THEN 'Low points'
+            WHEN points_balance > 0 THEN 'Minimal points'
+            WHEN points_balance = 0 AND transaction_type = 'redeem' THEN 'Points exhausted'
+            WHEN points_balance < 0 THEN 'Negative balance - Data error'
+            ELSE 'No points'
+        END AS customer_point_status,
+        
+        -- Data quality flags
+        CASE 
+            WHEN transaction_date > GETDATE() THEN 'Future date - Invalid'
+            WHEN points_earned < 0 AND transaction_type = 'earn' AND points_redeemed = 0 
+                THEN 'Negative earn - Possible adjustment'
+            WHEN points_balance < 0 THEN 'Negative balance - Data error'
+            WHEN transaction_type NOT IN ('earn', 'redeem') THEN 'Invalid transaction type'
+            WHEN transaction_type = 'redeem' AND points_redeemed <= 0 THEN 'Invalid redemption amount'
+            WHEN transaction_type = 'earn' AND points_earned <= 0 AND points_redeemed = 0 
+                THEN 'No points movement'
+            ELSE 'Valid'
+        END AS quality_flag
+        
+    FROM base
+)
+
+SELECT 
+    -- Surrogate key
+    transaction_id AS loyalty_transaction_key,
+    
+    -- Identifiers
+    transaction_id,
+    customer_id_clean AS customer_id,
+    order_id,
+    
+    -- Transaction details
+    transaction_date,
+    transaction_type_clean AS transaction_type,
+    
+    -- Points (clean values)
+    CASE 
+        WHEN transaction_type_clean = 'Earn' THEN points_earned
+        WHEN transaction_type_clean = 'Redeem' THEN -points_redeemed_absolute
+        ELSE points_net_change
+    END AS points_change,
+    
+    points_earned AS points_earned_raw,
+    points_redeemed_absolute AS points_redeemed,
+    points_balance,
+    
+    -- Metadata
+    order_source_type,
+    points_activity_tier,
+    customer_point_status,
+    
+    -- Time attributes
+    transaction_year,
+    transaction_month,
+    transaction_quarter,
+    transaction_year_month,
+    
+    -- Quality
+    quality_flag,
+    
+    -- Audit
+    GETDATE() AS etl_load_date,
+    'silver.loyalty_transactions' AS etl_source
+    
+-- INTO silver.loyalty_transactions
+FROM cleaned
+WHERE quality_flag != 'Future date - Invalid'
+ORDER BY transaction_date DESC, customer_id_clean
