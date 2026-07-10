@@ -3,20 +3,21 @@ GO
 DROP TABLE IF EXISTS silver.pos_line_items;
 GO
 WITH base AS (
-    SELECT 
+    SELECT
         REPLACE(TRIM([transaction_id]),' ' ,'') AS transaction_id,  -- Remove spaces
         [line_number],
-        [product_id],
-        CAST([quantity] AS INT) AS quantity,
-        ROUND(CAST([unit_price] AS FLOAT), 2) AS unit_price_kes,
-        CAST([discount_rate] AS FLOAT) AS discount_rate,
-        ROUND(CAST([line_total] AS FLOAT), 2) AS line_total_kes
+        CASE
+		     WHEN [product_id] LIKE '%DUP' THEN SUBSTRING(product_id,1,CHARINDEX('D',product_id,5)-2)
+			 ELSE [product_id] END AS product_id,
+        ABS(CAST([quantity] AS INT)) AS quantity,
+        ROUND(ABS(CAST([unit_price] AS FLOAT)), 2) AS unit_price_kes,
+        ABS(CAST([discount_rate] AS FLOAT)) AS discount_rate,
+        ROUND(ABS(CAST([line_total] AS FLOAT)), 2) AS line_total_kes
     FROM [Blue_canopy].[bronze].[pos_line_items_raw]
     WHERE [transaction_id] IS NOT NULL 
       AND [transaction_id] != ''
       AND [product_id] IS NOT NULL
 ),
-
 validated AS (
     SELECT 
         -- Core identifiers
@@ -102,8 +103,6 @@ SELECT
 INTO silver.pos_line_items
 FROM validated
 WHERE quality_flag = 'Valid'
-  AND transaction_id NOT LIKE '% %' 
-  AND product_id NOT LIKE '%DUP'
 ORDER BY transaction_id, line_number;
 GO
 DROP INDEX IF EXISTS idx_pos_line_items_poslinekey ON silver.pos_line_items;
