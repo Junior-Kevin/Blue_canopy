@@ -1,6 +1,10 @@
+USE Blue_canopy;
+GO
+DROP TABLE IF EXISTS silver.pos_line_items;
+GO
 WITH base AS (
     SELECT 
-        TRIM([transaction_id]) AS transaction_id,  -- Remove spaces
+        REPLACE(TRIM([transaction_id]),' ' ,'') AS transaction_id,  -- Remove spaces
         [line_number],
         [product_id],
         CAST([quantity] AS INT) AS quantity,
@@ -66,7 +70,7 @@ validated AS (
             WHEN unit_price_kes <= 0 THEN 'Invalid unit price'
             WHEN discount_rate < 0 OR discount_rate > 1 THEN 'Invalid discount rate'
             WHEN line_total_kes <= 0 THEN 'Invalid line total'
-            WHEN ABS(calculated_line_total - line_total_kes) > 0.01 THEN 'Line total mismatch'
+            WHEN ABS(ROUND(quantity * unit_price_kes * (1 - discount_rate), 2) - line_total_kes) > 0.01 THEN 'Line total mismatch'
             WHEN transaction_id LIKE '% %' OR transaction_id = '' THEN 'Malformed transaction ID'
             ELSE 'Valid'
         END AS quality_flag
@@ -76,38 +80,38 @@ validated AS (
 
 SELECT 
     -- Surrogate key
-    CONCAT(transaction_id, '_', line_number) AS pos_line_key,
-    
+    ROW_NUMBER() OVER(ORDER BY transaction_id)AS pos_line_key,
     -- Foreign keys
     transaction_id,
     line_number,
     product_id,
-    
-    -- Quantities and pricing
+    --Quantities and pricing
     quantity,
     unit_price_kes,
     discount_rate,
     effective_unit_price_kes,
     discount_amount_kes,
     line_total_kes,
-    
-    -- Validation
-    calculated_line_total,
-    
     -- Categorizations
     discount_tier,
     line_value_tier,
     transaction_source,
-    
-    -- Quality
-    quality_flag,
-    
     -- Audit
     GETDATE() AS etl_load_date,
     'silver.pos_line_items' AS etl_source
-    
 INTO silver.pos_line_items
 FROM validated
 WHERE quality_flag = 'Valid'
-  AND transaction_id NOT LIKE '% %'  -- Filter out malformed IDs
-ORDER BY transaction_id, line_number
+  AND transaction_id NOT LIKE '% %' 
+  AND product_id NOT LIKE '%DUP'
+ORDER BY transaction_id, line_number;
+GO
+DROP INDEX IF EXISTS idx_pos_line_items_poslinekey ON silver.pos_line_items;
+GO
+CREATE CLUSTERED COLUMNSTORE INDEX idx_pos_line_items_poslinekey ON
+silver.pos_line_items;
+GO
+DROP INDEX IF EXISTS idx_poslineitemstransaction_id ON silver.pos_line_items;
+GO
+CREATE NONCLUSTERED INDEX idx_poslineitemstransaction_id 
+ON silver.pos_line_items (transaction_id);
