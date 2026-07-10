@@ -1,6 +1,10 @@
+USE Blue_canopy;
+GO
+DROP TABLE IF EXISTS silver.pos_transactions;
+GO
 WITH base AS (
     SELECT 
-        [transaction_id],
+        REPLACE([transaction_id], ' ','') transaction_id,
         [transaction_date],
         [store_id],
         [customer_id],
@@ -10,12 +14,10 @@ WITH base AS (
     FROM [Blue_canopy].[bronze].[pos_transactions_raw]
     WHERE [transaction_id] IS NOT NULL
 ),
-
 cleaned AS (
     SELECT 
         -- Core identifiers
         transaction_id,
-        
         -- Parse transaction_date (remove 'T' and handle timezone)
         CAST(LEFT(transaction_date, 10) AS DATE) AS transaction_date,
         CAST(SUBSTRING(transaction_date, 12, 8) AS TIME) AS transaction_time,
@@ -99,7 +101,7 @@ cleaned AS (
 
 SELECT 
     -- Surrogate key
-    transaction_id AS pos_transaction_key,
+    ROW_NUMBER() OVER(ORDER BY transaction_id)  AS pos_transaction_key,
     
     -- Identifiers
     transaction_id,
@@ -128,11 +130,16 @@ SELECT
     -- Quality
     quality_flag,
     
-    -- Audit
+    -- Audit        
     GETDATE() AS etl_load_date,
     'silver.pos_transactions' AS etl_source
     
 INTO silver.pos_transactions
 FROM cleaned
 WHERE quality_flag != 'Future date - Invalid'  -- Filter out future dates
-ORDER BY transaction_date DESC, transaction_time DESC
+ORDER BY transaction_date DESC, transaction_time DESC;
+GO
+DROP INDEX IF EXISTS idx_postransactions_transid ON silver.pos_transactions;
+GO
+CREATE UNIQUE CLUSTERED INDEX idx_postransactions_transid
+ON silver.pos_transactions (transaction_id);
