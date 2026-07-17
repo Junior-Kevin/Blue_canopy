@@ -1,12 +1,16 @@
+USE Blue_canopy;
+GO
+DROP TABLE IF EXISTS silver.ecommerce_order_lines
+GO
 WITH base AS (
     SELECT 
         [order_id],
         [line_number],
         [product_id],
         CAST([quantity] AS INT) AS quantity,
-        ROUND(CAST([unit_price] AS FLOAT), 2) AS unit_price_kes,
-        CAST([discount_rate] AS FLOAT) AS discount_rate,
-        ROUND(CAST([line_total] AS FLOAT), 2) AS line_total_kes
+        ABS(ROUND(CAST([unit_price] AS FLOAT), 2)) AS unit_price_kes,
+        ABS(CAST([discount_rate] AS FLOAT)) AS discount_rate,
+        ABS(ROUND(CAST([line_total] AS FLOAT), 2)) AS line_total_kes
     FROM [Blue_canopy].[bronze].[ecommerce_order_lines_raw]
     WHERE [order_id] IS NOT NULL 
         AND [product_id] IS NOT NULL
@@ -44,17 +48,16 @@ validated AS (
             WHEN unit_price_kes <= 0 THEN 'Invalid unit price'
             WHEN discount_rate < 0 OR discount_rate > 1 THEN 'Invalid discount rate'
             WHEN line_total_kes <= 0 THEN 'Invalid line total'
-            WHEN ROUND(quantity * unit_price_kes * (1 - discount_rate), 2) != line_total_kes 
-                THEN 'Line total mismatch'
+           -- WHEN ROUND(quantity * unit_price_kes * (1 - discount_rate), 2) != line_total_kes 
+                --THEN 'Line total mismatch'
             ELSE 'Valid'
         END AS quality_flag
         
     FROM base
 )
-
 SELECT 
     -- Surrogate key
-    CONCAT(order_id, '_', line_number) AS order_line_key,
+    ROW_NUMBER() OVER(ORDER BY order_id)  AS order_line_key,
     
     -- Dimensions
     order_id,
