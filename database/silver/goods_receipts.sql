@@ -1,8 +1,13 @@
+DROP TABLE IF EXISTS silver.goods_receipts;
+GO
 WITH base AS (
     SELECT 
         [receipt_id],
         [po_number],
-        CAST([receipt_date] AS DATE) AS receipt_date,
+		CAST (CASE 
+		    WHEN receipt_date= '2023-13-45' THEN '2023-12-25'
+			ELSE receipt_date
+		END AS DATE)  receipt_date, 
         [product_id],
         CAST([quantity_received] AS INT) AS quantity_received,
         [receiving_notes]
@@ -96,7 +101,7 @@ SELECT
     GETDATE() AS etl_load_date,
     'silver.goods_receipts' AS etl_source
     
--- INTO silver.goods_receipts
+INTO silver.goods_receipts
 FROM cleaned
 WHERE quantity_received > 0
 ORDER BY receipt_date DESC, po_number
