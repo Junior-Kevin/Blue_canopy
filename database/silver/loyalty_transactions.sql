@@ -1,10 +1,15 @@
+DROP TABLE IF EXISTS silver.loyalty_transactions;
+GO
 WITH base AS (
     SELECT 
         [transaction_id],
         [customer_id],
-        CAST([date] AS DATE) AS transaction_date,
+          CAST(CASE
+		    WHEN [date] = '2023-13-45' THEN '2023-12-25' 
+				ELSE date END 
+		    AS DATE) transaction_date,
         CAST([points_earned] AS INT) AS points_earned,
-        CAST([points_redeemed] AS INT) AS points_redeemed,
+        ABS(CAST([points_redeemed] AS INT)) AS points_redeemed,
         CAST([points_balance] AS INT) AS points_balance,
         LOWER(TRIM([transaction_type])) AS transaction_type,
         [order_id]
@@ -34,7 +39,7 @@ cleaned AS (
         
         -- Points (absolute values for calculations)
         points_earned,
-        ABS(points_redeemed) AS points_redeemed_absolute,  -- Store as positive
+        points_redeemed,  -- Store as positive
         points_balance,
         
         -- For redemption: store as negative for running balance calculation
@@ -67,7 +72,7 @@ cleaned AS (
             WHEN points_earned >= 500 THEN 'Medium earner (500-999 points)'
             WHEN points_earned >= 100 THEN 'Low earner (100-499 points)'
             WHEN points_earned > 0 THEN 'Small earner (1-99 points)'
-            WHEN points_redeemed_absolute >= 1000 THEN 'High redemption (1000+ points)'
+            WHEN points_redeemed >= 1000 THEN 'High redemption (1000+ points)'
             ELSE 'No significant activity'
         END AS points_activity_tier,
         
@@ -114,12 +119,12 @@ SELECT
     -- Points (clean values)
     CASE 
         WHEN transaction_type_clean = 'Earn' THEN points_earned
-        WHEN transaction_type_clean = 'Redeem' THEN -points_redeemed_absolute
+        WHEN transaction_type_clean = 'Redeem' THEN -points_redeemed
         ELSE points_net_change
     END AS points_change,
     
     points_earned AS points_earned_raw,
-    points_redeemed_absolute AS points_redeemed,
+    points_redeemed AS points_redeemed,
     points_balance,
     
     -- Metadata
@@ -140,7 +145,7 @@ SELECT
     GETDATE() AS etl_load_date,
     'silver.loyalty_transactions' AS etl_source
     
--- INTO silver.loyalty_transactions
+INTO silver.loyalty_transactions
 FROM cleaned
 WHERE quality_flag != 'Future date - Invalid'
 ORDER BY transaction_date DESC, customer_id_clean
