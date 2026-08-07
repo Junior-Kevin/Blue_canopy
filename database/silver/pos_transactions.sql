@@ -22,7 +22,6 @@ cleaned AS (
         -- Parse transaction_date (remove 'T' and handle timezone)
         CAST(LEFT(b.transaction_date, 10) AS DATE) AS transaction_date,
         CAST(SUBSTRING(b.transaction_date, 12, 8) AS TIME) AS transaction_time,
-        
         -- Clean store_id
         CASE 
             WHEN b.store_id LIKE '%-DUP%' THEN LEFT(b.store_id, CHARINDEX('-DUP', b.store_id) - 1)
@@ -102,7 +101,7 @@ cleaned AS (
 lines AS (
     SELECT 
         transaction_id,
-        SUM([line_total_kes]) AS line_total 
+        SUM([line_total]) AS line_total 
     FROM [silver].[pos_line_items]
     GROUP BY transaction_id
 )
@@ -144,7 +143,7 @@ SELECT
     
 INTO silver.pos_transactions
 FROM cleaned c
-INNER JOIN lines l
+LEFT JOIN lines l
     ON c.transaction_id = l.transaction_id
 WHERE c.quality_flag != 'Future date - Invalid'  -- Filter out future dates
 ORDER BY c.transaction_date DESC, c.transaction_time DESC;
