@@ -13,11 +13,7 @@ WITH base AS (
         CAST(reorder_point AS FLOAT) AS reorder_point,
         CAST(safety_stock AS INT) AS safety_stock
     FROM [Blue_canopy].[bronze].[inventory_snapshots_raw]
-	WHERE TRY_CAST(on_hand_quantity AS INT) IS NOT NULL
-	AND TRY_CAST(reorder_point AS FLOAT) IS NOT NULL
-	AND TRY_CAST(safety_stock AS INT) IS NOT NULL
 ),
-
 cleaned AS (
     SELECT 
         -- Clean store IDs (same pattern as movements table)
@@ -65,7 +61,7 @@ cleaned AS (
             ELSE 'Valid'
         END AS quality_flag
     FROM base
-    WHERE snapshot_date IS NOT NULL  -- Ensure we have valid dates
+    --WHERE snapshot_date IS NOT NULL  -- Ensure we have valid dates
 )
 
 SELECT 
