@@ -1,10 +1,12 @@
+
+DROP TABLE IF EXISTS silver.feedback;
+GO
 WITH base AS (
     SELECT 
         [feedback_id],
         [customer_id],
-        [date],
+        CAST([date] AS DATE) date,
         CAST([rating] AS INT) AS rating,
-        [comment],
         [category]
     FROM [Blue_canopy].[bronze].[feedback_raw]
     WHERE [feedback_id] IS NOT NULL
@@ -33,10 +35,7 @@ cleaned AS (
         
         -- Category (standardize)
         TRIM(category) AS category_clean,
-        
-        -- Comment (clean NULLs and trim)
-        COALESCE(TRIM(comment), 'No comment provided') AS comment_clean,
-        
+      
         -- Sentiment categorization based on rating
         CASE 
             WHEN rating >= 4 THEN 'Positive'
@@ -87,19 +86,11 @@ SELECT
     rating_label,
     sentiment,
     category_clean AS category,
-    comment_clean AS comment,
-    
     -- Flags
     CASE 
         WHEN feedback_date > GETDATE() THEN 1 
         ELSE 0 
     END AS is_future_dated,
-    
-    CASE 
-        WHEN comment_clean = 'No comment provided' THEN 1 
-        ELSE 0 
-    END AS has_no_comment,
-    
     -- Quality
     quality_flag,
     
@@ -107,7 +98,7 @@ SELECT
     GETDATE() AS etl_load_date,
     'silver.feedback' AS etl_source
     
--- INTO silver.feedback
+INTO silver.feedback
 FROM cleaned
 WHERE rating BETWEEN 1 AND 5  -- Only valid ratings
 ORDER BY feedback_date DESC, rating DESC
