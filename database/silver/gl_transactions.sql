@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS silver.gl_transactions;
+GO
 WITH base AS (
     SELECT 
         [transaction_id],
@@ -5,7 +7,10 @@ WITH base AS (
         CAST([date] AS DATE) AS transaction_date,
         CAST([amount] AS FLOAT) AS amount,
         LOWER([type]) AS transaction_type,
-        [store_id]
+        CASE 
+            WHEN store_id LIKE '%-DUP%' THEN LEFT(store_id, CHARINDEX('-DUP', store_id) - 1)
+            ELSE store_id
+        END AS store_id
     FROM [Blue_canopy].[bronze].[gl_transactions_raw]
     WHERE [transaction_id] IS NOT NULL
 ),
@@ -21,11 +26,7 @@ cleaned AS (
         account_code,
         
         -- Clean store_id (handle -DUP suffix)
-        CASE 
-            WHEN store_id LIKE '%-DUP%' THEN LEFT(store_id, CHARINDEX('-DUP', store_id) - 1)
-            ELSE store_id
-        END AS store_id_clean,
-        
+         store_id,
         -- Transaction date
         transaction_date,
         YEAR(transaction_date) AS transaction_year,
@@ -67,7 +68,7 @@ cleaned AS (
         CASE 
             WHEN amount <= 0 THEN 'Invalid amount'
             WHEN transaction_type NOT IN ('debit', 'credit') THEN 'Invalid transaction type'
-            WHEN store_id_clean IS NULL THEN 'Missing store'
+            WHEN store_id IS NULL THEN 'Missing store'
             WHEN account_code IS NULL THEN 'Missing account'
             ELSE 'Valid'
         END AS quality_flag
@@ -85,7 +86,7 @@ SELECT
     account_number,
     account_name,
     account_category,
-    store_id_clean AS store_id,
+    store_id,
     
     -- Transaction details
     transaction_date,
@@ -107,7 +108,7 @@ SELECT
     GETDATE() AS etl_load_date,
     'silver.gl_transactions' AS etl_source
     
--- INTO silver.gl_transactions
+INTO silver.gl_transactions
 FROM cleaned
 WHERE quality_flag = 'Valid'
 ORDER BY transaction_date DESC, transaction_id
