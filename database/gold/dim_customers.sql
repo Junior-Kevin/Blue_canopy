@@ -19,12 +19,6 @@ SELECT  ROW_NUMBER() OVER(order by registration_date) customer_sk
       ,[age_band]
       ,[phone]
       ,[email]
-      ,CASE 
-	       WHEN cc.[home_county] IS NULL THEN crm.county
-		   ELSE cc.[home_county]
-		END AS home_county
-      ,cc.[primary_store_id]
-	  ,cc.visits_to_primary_store
       ,[town]
       ,[customer_segment]
       ,[acquisition_channel]
@@ -46,10 +40,3 @@ SELECT  ROW_NUMBER() OVER(order by registration_date) customer_sk
       ,[is_email_valid]
    INTO gold.dim_customers
    FROM [Blue_canopy].[silver].[crm] crm 
-   LEFT JOIN [Blue_canopy].[silver].[cust_county] cc
-   ON crm.customer_id = cc.customer_id
-
-
-
-
-
