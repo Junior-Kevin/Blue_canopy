@@ -6,7 +6,7 @@ WITH base AS (
     SELECT 
         [order_id],
         [line_number],
-        [product_id],
+        LEFT([product_id],9) product_id,
         CAST([quantity] AS INT) AS quantity,
         ABS(ROUND(CAST([unit_price] AS FLOAT), 2)) AS unit_price_kes,
         ABS(CAST([discount_rate] AS FLOAT)) AS discount_rate,
