@@ -44,4 +44,3 @@ SELECT ROW_NUMBER() OVER(ORDER BY employee_id) employee_sk
       ,[hire_cohort]
 	  INTO gold.dim_employee
   FROM [Blue_canopy].[silver].[hr]
-  WHERE valid_to IS NULL --filter out historical data( former employees)
