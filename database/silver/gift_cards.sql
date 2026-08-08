@@ -8,6 +8,7 @@ SELECT [card_number]
 	  ,SUBSTRING(current_balance,CHARINDEX(',',current_balance)+1,100) transactions
   FROM [Blue_canopy].[bronze].[gift_cards_raw])
   SELECT card_number
+       , customer_id
        ,[issue_date]
       ,[expiry_date]
       ,[initial_balance]
