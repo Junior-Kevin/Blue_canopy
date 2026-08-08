@@ -1,11 +1,10 @@
+
 DROP TABLE IF EXISTS silver.competitor_quarterly
 GO
 SELECT comp_qtr_key = ROW_NUMBER() OVER(ORDER BY [quarter])
-      ,[competitor_id]
+       ,[competitor_id]
       ,[quarter]
-      ,CAST([revenue_kes] AS bigint) revenue_kes
-      ,CAST([market_share_pct] AS FLOAT) market_share_pct
+	  ,CAST(SUBSTRING(market_share_pct,1,CHARINDEX(',',[market_share_pct])-1) AS INT) revenue_kes
+	  ,CAST(SUBSTRING(market_share_pct,CHARINDEX(',',[market_share_pct])+1,4) AS FLOAT) market_share_pct
 INTO silver.competitor_quarterly
 FROM [Blue_canopy].[bronze].[competitor_quarterly_raw]
-
-
