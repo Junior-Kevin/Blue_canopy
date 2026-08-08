@@ -24,7 +24,7 @@ SELECT ROW_NUMBER() OVER(PARTITION BY card_number ORDER BY date) flag
       ,[date]
       ,CASE WHEN  (CASE WHEN flag = 1 AND type = 'issue' THEN 'issue'
 	        WHEN flag !=1 AND type = 'issue' THEN 'top_up' 
-		ELSE 'redeem' END) = 'top_up' THEN amount*-1 ELSE amount END as amount
+		ELSE 'redeem' END) = 'redeem' THEN amount*-1 ELSE amount END as amount
 	  ,CASE WHEN flag = 1 AND type = 'issue' THEN 'issue'
 	        WHEN flag !=1 AND type = 'issue' THEN 'top_up' 
 		ELSE 'redeem' END AS type
