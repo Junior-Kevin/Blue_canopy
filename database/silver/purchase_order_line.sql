@@ -1,8 +1,13 @@
+DROP TABLE IF EXISTS silver.purchase_order_lines;
+
 WITH base AS (
     SELECT 
         [po_number],
         [line_number],
-        [product_id],
+        CASE 
+		    WHEN [product_id] LIKE '%DUP'THEN LEFT(product_id,CHARINDEX('-',product_id,6)-1) 
+			ELSE product_id end as product_id,
+
         CAST([quantity_ordered] AS INT) AS quantity_ordered,
         ROUND(CAST([unit_price] AS FLOAT), 2) AS unit_price_kes,
         ROUND(CAST([line_total] AS FLOAT), 2) AS line_total_kes,
@@ -75,4 +80,5 @@ SELECT
     
 INTO silver.purchase_order_lines
 FROM validated
+WHERE po_number NOT LIKE '%DUP'
 ORDER BY po_number, line_number
