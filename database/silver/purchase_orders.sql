@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS silver.purchase_orders;
+
 WITH base AS (
     SELECT 
         [po_number],
@@ -81,7 +83,6 @@ SELECT
     po_number AS purchase_order_key,
     
     -- Dimensions
-    po_number,
     supplier_id_clean AS supplier_id,
     status,
     status_category,
@@ -124,6 +125,6 @@ SELECT
     'silver.purchase_orders' AS etl_source
     
 INTO silver.purchase_orders
-FROM calculated
-WHERE order_date IS NOT NULL
-ORDER BY order_date DESC, po_number
+FROM calculated c
+WHERE order_date IS NOT NULL AND c.po_number NOT LIKE '%DUP'
+ORDER BY order_date DESC, c.po_number
