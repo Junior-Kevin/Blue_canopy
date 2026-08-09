@@ -58,14 +58,14 @@ SELECT
     product_id,
     
     -- Quantities and costs
-    quantity_ordered,
-    unit_price_kes,
-    line_total_kes,
+    ABS(quantity_ordered) quantity_ordered ,
+    ABS(unit_price_kes) unit_price_kes ,
+    ABS(line_total_kes) line_total_kes ,
     
     -- Derived metrics
-    calculated_unit_price,
-    landed_cost_kes,
-    estimated_vat_kes,
+    ABS(calculated_unit_price) calculated_unit_price ,
+    ABS(landed_cost_kes) landed_cost_kes,
+    ABS(estimated_vat_kes)estimated_vat_kes ,
     
     -- PO metadata
     po_prefix,
