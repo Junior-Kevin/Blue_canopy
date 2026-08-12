@@ -21,7 +21,7 @@ This document outlines the data modelling process for the Blue Canopy Retail Ana
 
 ## 📁 Tables Before Data Modelling (Raw Silver Layer)
 
-![Raw Data Tables](raw_data_tables.png)
+![Raw Data Tables](https://github.com/Junior-Kevin/Blue_canopy_-Business-Intelligence_project/blob/main/power%20bi/data%20modelling/raw_data_tables.png?raw=true)
 
 ---
 
