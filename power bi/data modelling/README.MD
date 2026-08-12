@@ -8,7 +8,7 @@ markdown
 
 ## 📁 Project Overview
 
-This document outlines the data modelling process for the Blue Canopy Retail Analytics Project. I built the **entire dimensional model directly in Power BI** using Power Query (M language). Starting from 29 raw silver-layer tables imported from SQL Server, I transformed them into a production-ready star schema.
+This document outlines the data modelling process for the Blue Canopy Retail Analytics Project. I built the **entire dimensional model directly in Power BI** using Power Query (M language). Starting from 29 raw silver-layer tables imported from SQL Server, I transformed them into a production-ready **GALAXY SCHEMA**.
 
 **Key Stats:**
 - ✅ **29 Silver Tables** → **15 Gold Objects**
